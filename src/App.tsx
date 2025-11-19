@@ -15,9 +15,11 @@ function App() {
   const handleSignIn = async () => {
     try {
       await signInWithGoogle();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Sign in error:', error);
-      alert('Failed to sign in. Please try again.');
+      // Show more specific error message
+      const errorMessage = error?.message || 'Failed to sign in. Please try again.';
+      alert(errorMessage);
     }
   };
 

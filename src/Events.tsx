@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from './useAuth';
 import './Events.css';
 
@@ -42,17 +42,14 @@ const Events: React.FC = () => {
 
   const eventServiceUrl = process.env.REACT_APP_EVENTS_SERVICE_URL || 'http://localhost:8080';
 
-  useEffect(() => {
-    if (idToken) {
-      fetchEvents();
-    }
-  }, [idToken]);
-
-  const fetchEvents = async () => {
+  const fetchEvents = useCallback(async () => {
     if (!idToken) return;
     
     try {
       setLoading(true);
+      setError(null);
+      console.log('Fetching events from:', `${eventServiceUrl}/events/`);
+      
       const response = await fetch(`${eventServiceUrl}/events/`, {
         method: 'GET',
         headers: {
@@ -61,18 +58,47 @@ const Events: React.FC = () => {
       });
 
       if (!response.ok) {
-        throw new Error('Failed to fetch events');
+        // Try to get error details from response
+        let errorMessage = 'Failed to fetch events';
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.detail || errorData.message || errorMessage;
+        } catch {
+          // If response is not JSON, use status text
+          errorMessage = `Backend error: ${response.status} ${response.statusText}`;
+        }
+        
+        // Distinguish between different error types
+        if (response.status === 0 || response.status >= 500) {
+          throw new Error(`Cannot connect to Event-Service. Please ensure it's running on ${eventServiceUrl}`);
+        } else if (response.status === 401 || response.status === 403) {
+          throw new Error('Authentication failed. Please try logging in again.');
+        } else {
+          throw new Error(errorMessage);
+        }
       }
 
       const data = await response.json();
       setEvents(data);
+      setError(null); // Clear any previous errors
     } catch (error: any) {
       console.error('Error fetching events:', error);
-      setError('Failed to load events');
+      // Handle network errors specifically
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        setError(`Cannot connect to Event-Service at ${eventServiceUrl}. Please ensure Event-Service is running.`);
+      } else {
+        setError(error.message || 'Failed to load events');
+      }
     } finally {
       setLoading(false);
     }
-  };
+  }, [idToken, eventServiceUrl]);
+
+  useEffect(() => {
+    if (idToken) {
+      fetchEvents();
+    }
+  }, [idToken, fetchEvents]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -129,8 +155,24 @@ const Events: React.FC = () => {
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || 'Failed to create event');
+        // Try to get error details from response
+        let errorMessage = 'Failed to create event';
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.detail || errorData.message || errorMessage;
+        } catch {
+          // If response is not JSON, use status text
+          errorMessage = `Backend error: ${response.status} ${response.statusText}`;
+        }
+        
+        // Distinguish between different error types
+        if (response.status === 0 || response.status >= 500) {
+          throw new Error(`Cannot connect to Event-Service. Please ensure it's running on ${eventServiceUrl}`);
+        } else if (response.status === 401 || response.status === 403) {
+          throw new Error('Authentication failed. Please try logging in again.');
+        } else {
+          throw new Error(errorMessage);
+        }
       }
 
       setSuccess('Event created successfully!');
@@ -138,7 +180,12 @@ const Events: React.FC = () => {
       fetchEvents();
     } catch (error: any) {
       console.error('Error creating event:', error);
-      setError(error.message || 'Failed to create event');
+      // Handle network errors specifically
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        setError(`Cannot connect to Event-Service at ${eventServiceUrl}. Please ensure Event-Service is running.`);
+      } else {
+        setError(error.message || 'Failed to create event');
+      }
     }
   };
 
@@ -175,8 +222,24 @@ const Events: React.FC = () => {
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || 'Failed to update event');
+        // Try to get error details from response
+        let errorMessage = 'Failed to update event';
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.detail || errorData.message || errorMessage;
+        } catch {
+          // If response is not JSON, use status text
+          errorMessage = `Backend error: ${response.status} ${response.statusText}`;
+        }
+        
+        // Distinguish between different error types
+        if (response.status === 0 || response.status >= 500) {
+          throw new Error(`Cannot connect to Event-Service. Please ensure it's running on ${eventServiceUrl}`);
+        } else if (response.status === 401 || response.status === 403) {
+          throw new Error('Authentication failed. Please try logging in again.');
+        } else {
+          throw new Error(errorMessage);
+        }
       }
 
       setSuccess('Event updated successfully!');
@@ -184,7 +247,12 @@ const Events: React.FC = () => {
       fetchEvents();
     } catch (error: any) {
       console.error('Error updating event:', error);
-      setError(error.message || 'Failed to update event');
+      // Handle network errors specifically
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        setError(`Cannot connect to Event-Service at ${eventServiceUrl}. Please ensure Event-Service is running.`);
+      } else {
+        setError(error.message || 'Failed to update event');
+      }
     }
   };
 

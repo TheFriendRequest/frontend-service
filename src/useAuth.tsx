@@ -60,17 +60,31 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       const token = tokenResult.token;
       setIdToken(token);
       
-      // Sync user to backend with the token
-      await syncUserToBackend({
-        first_name: user.displayName?.split(' ')[0] || '',
-        last_name: user.displayName?.split(' ').slice(1).join(' ') || '',
-        username: user.email?.split('@')[0] || '',
-        email: user.email || '',
-        profile_picture: user.photoURL || null
-      }, token);
+      // Try to sync user to backend, but don't fail login if this fails
+      // User is already authenticated via Firebase
+      try {
+        await syncUserToBackend({
+          first_name: user.displayName?.split(' ')[0] || '',
+          last_name: user.displayName?.split(' ').slice(1).join(' ') || '',
+          username: user.email?.split('@')[0] || '',
+          email: user.email || '',
+          profile_picture: user.photoURL || null
+        }, token);
+      } catch (syncError: any) {
+        // Log the error but don't throw - user is still logged in via Firebase
+        console.warn('Failed to sync user to backend, but login succeeded:', syncError);
+        // Try to fetch profile anyway in case user already exists
+        await fetchUserProfile(token).catch(() => {
+          console.warn('Could not fetch user profile from backend');
+        });
+      }
     } catch (error: any) {
       console.error('Error signing in with Google:', error);
-      throw error;
+      // Only throw if it's an actual Firebase authentication error
+      if (error.code && error.code.startsWith('auth/')) {
+        throw new Error(`Authentication failed: ${error.message || 'Please try again.'}`);
+      }
+      throw new Error('Failed to sign in. Please try again.');
     }
   };
 
@@ -78,11 +92,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     const tokenToUse = token || idToken;
     if (!tokenToUse) {
       console.error('No ID token available');
-      return;
+      throw new Error('No authentication token available');
     }
 
+    const usersServiceUrl = process.env.REACT_APP_USERS_SERVICE_URL || 'http://localhost:8000';
+    
     try {
-      const usersServiceUrl = process.env.REACT_APP_USERS_SERVICE_URL || 'http://localhost:8000';
+      console.log('Syncing user to backend at:', `${usersServiceUrl}/users/sync`);
+      
       const response = await fetch(`${usersServiceUrl}/users/sync`, {
         method: 'POST',
         headers: {
@@ -93,7 +110,24 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       });
 
       if (!response.ok) {
-        throw new Error('Failed to sync user to backend');
+        // Try to get error details from response
+        let errorMessage = 'Failed to sync user to backend';
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.detail || errorData.message || errorMessage;
+        } catch {
+          // If response is not JSON, use status text
+          errorMessage = `Backend error: ${response.status} ${response.statusText}`;
+        }
+        
+        // Distinguish between different error types
+        if (response.status === 0 || response.status >= 500) {
+          throw new Error(`Cannot connect to backend service. Please ensure Users-Service is running on ${usersServiceUrl}`);
+        } else if (response.status === 401 || response.status === 403) {
+          throw new Error('Authentication failed. Please try logging in again.');
+        } else {
+          throw new Error(errorMessage);
+        }
       }
 
       const result = await response.json();
@@ -101,8 +135,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       
       // Fetch user profile from backend
       await fetchUserProfile(tokenToUse);
-    } catch (error) {
-      console.error('Error syncing user to backend:', error);
+    } catch (error: any) {
+      // Re-throw with more context if it's not already an Error object
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        throw new Error(`Cannot connect to backend service at ${usersServiceUrl}. Please ensure Users-Service is running.`);
+      }
       throw error;
     }
   };
@@ -125,6 +162,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       if (response.ok) {
         const profile = await response.json();
         setUserProfile(profile);
+      } else {
+        console.warn(`Failed to fetch user profile: ${response.status} ${response.statusText}`);
       }
     } catch (error) {
       console.error('Error fetching user profile:', error);
