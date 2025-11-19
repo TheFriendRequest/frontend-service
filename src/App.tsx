@@ -1,11 +1,15 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useAuth } from './useAuth';
+import Events from './Events';
 import logo from './file.svg';
 import './App.css';
+
+type Page = 'home' | 'events';
 
 function App() {
   const { currentUser, userProfile, loading, signInWithGoogle, logout } = useAuth();
   const [showDropdown, setShowDropdown] = useState(false);
+  const [currentPage, setCurrentPage] = useState<Page>('home');
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const handleSignIn = async () => {
@@ -123,12 +127,41 @@ function App() {
         </div>
       </header>
 
-      {/* Main Content - Landing Page */}
-      <div className="App-main">
-        <img src={logo} className="App-logo" alt="logo" />
-        <p className="App-welcome-text">
-          Welcome to FriendRequest by SHaaS
-        </p>
+      {/* Navigation */}
+      {currentUser && (
+        <nav className="App-nav">
+          <button 
+            className={`App-nav-button ${currentPage === 'home' ? 'active' : ''}`}
+            onClick={() => setCurrentPage('home')}
+          >
+            Home
+          </button>
+          <button 
+            className={`App-nav-button ${currentPage === 'events' ? 'active' : ''}`}
+            onClick={() => setCurrentPage('events')}
+          >
+            Events
+          </button>
+        </nav>
+      )}
+
+      {/* Main Content */}
+      <div className={`App-main ${currentPage === 'home' ? 'home-page' : ''}`}>
+        {currentPage === 'home' ? (
+          <>
+            <img src={logo} className="App-logo" alt="logo" />
+            <p className="App-welcome-text">
+              Welcome to FriendRequest by SHaaS
+            </p>
+            {currentUser && (
+              <p className="App-welcome-subtext">
+                {userProfile ? `Hello, ${userProfile.first_name} ${userProfile.last_name}!` : 'Welcome!'}
+              </p>
+            )}
+          </>
+        ) : (
+          <Events />
+        )}
       </div>
     </div>
   );
