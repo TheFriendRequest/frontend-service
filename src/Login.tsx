@@ -2,7 +2,11 @@ import React, { useState } from 'react';
 import { useAuth } from './useAuth';
 import './Login.css';
 
-const Login: React.FC = () => {
+interface LoginProps {
+  onBack?: () => void;
+}
+
+const Login: React.FC<LoginProps> = ({ onBack }) => {
   const { signInWithEmail, signUpWithEmail, signInWithGoogle } = useAuth();
   const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState('');
@@ -68,9 +72,15 @@ const Login: React.FC = () => {
   };
 
   return (
-    <div className="login-container">
-      <div className="login-card">
-        <div className="login-header">
+    <div className="login-page-container">
+      {onBack && (
+        <button className="login-back-button" onClick={onBack}>
+          ← Back
+        </button>
+      )}
+      <div className="login-container">
+        <div className="login-card">
+          <div className="login-header">
           <h1 className="login-title">FriendRequest</h1>
           <p className="login-subtitle">
             {isSignUp ? 'Create your account' : 'Welcome back'}
@@ -197,6 +207,7 @@ const Login: React.FC = () => {
               ? 'Already have an account? Sign in'
               : "Don't have an account? Sign up"}
           </button>
+          </div>
         </div>
       </div>
     </div>

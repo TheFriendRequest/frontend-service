@@ -265,8 +265,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       // Log eTag from response (if present)
       const etag = response.headers.get('ETag') || response.headers.get('etag');
+      console.log('🔐 Auth Service - Response Headers (GET /users/me):', {
+        'ETag': etag || '(not found)',
+        'All Headers': Array.from(response.headers.entries()),
+        'URL': `${compositeServiceUrl}/api/users/me`
+      });
       if (etag) {
-        console.log('🔐 Auth Service - eTag received (GET /users/me):', etag);
+        console.log('✅ eTag received:', etag);
+      } else {
+        console.warn('⚠️  eTag not found in response headers');
       }
 
       if (response.ok) {

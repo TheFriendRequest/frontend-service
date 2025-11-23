@@ -1,7 +1,8 @@
 .events-container {
   max-width: 1200px;
-  margin: 0 auto;
-  padding: 20px;
+  width: 100%;
+  margin: 0;
+  padding: 24px 24px 24px 0;
 }
 
 .events-header {
@@ -9,53 +10,65 @@
   justify-content: space-between;
   align-items: center;
   margin-bottom: 30px;
+  padding-left: 41px;
 }
 
 .events-header h2 {
   margin: 0;
   color: #333;
+  font-size: 24px;
+  font-weight: 600;
 }
 
 .events-create-button {
-  background-color: #4285f4;
+  background-color: #1565c0;
   color: white;
   border: none;
-  padding: 10px 20px;
-  border-radius: 5px;
+  padding: 8px 16px;
+  border-radius: 6px;
   cursor: pointer;
-  font-size: 16px;
-  font-weight: 500;
-  transition: background-color 0.3s;
+  font-size: 14px;
+  font-weight: 600;
+  transition: background-color 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .events-create-button:hover {
-  background-color: #357ae8;
+  background-color: #0d47a1;
 }
 
 .events-error {
-  background-color: #fee;
-  color: #c33;
-  padding: 12px;
-  border-radius: 5px;
+  background-color: #fff3cd;
+  color: #856404;
+  padding: 12px 16px;
+  border-radius: 6px;
   margin-bottom: 20px;
-  border: 1px solid #fcc;
+  margin-left: 24px;
+  border: 1px solid #ffc107;
+  font-size: 14px;
 }
 
 .events-success {
-  background-color: #efe;
-  color: #3c3;
-  padding: 12px;
-  border-radius: 5px;
+  background-color: #d1ecf1;
+  color: #0c5460;
+  padding: 12px 16px;
+  border-radius: 6px;
   margin-bottom: 20px;
-  border: 1px solid #cfc;
+  margin-left: 24px;
+  border: 1px solid #bee5eb;
+  font-size: 14px;
 }
 
 .events-form-container {
-  background-color: #f9f9f9;
-  padding: 25px;
+  background-color: white;
+  padding: 24px;
   border-radius: 8px;
-  margin-bottom: 30px;
-  border: 1px solid #ddd;
+  margin-bottom: 24px;
+  margin-left: 24px;
+  border: 1px solid #e4e6eb;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
 }
 
 .events-form-container h3 {
@@ -78,11 +91,21 @@
 .events-form-group input,
 .events-form-group textarea {
   width: 100%;
-  padding: 10px;
-  border: 1px solid #ddd;
-  border-radius: 5px;
-  font-size: 14px;
+  padding: 12px;
+  border: 1px solid #ccd0d5;
+  border-radius: 6px;
+  font-size: 15px;
   box-sizing: border-box;
+  background: #f0f2f5;
+  transition: all 0.2s;
+}
+
+.events-form-group input:focus,
+.events-form-group textarea:focus {
+  outline: none;
+  border-color: #1565c0;
+  box-shadow: 0 0 0 2px rgba(21, 101, 192, 0.1);
+  background: white;
 }
 
 .events-form-group textarea {
@@ -109,34 +132,35 @@
 }
 
 .events-submit-button {
-  background-color: #4285f4;
+  background-color: #1565c0;
   color: white;
   border: none;
   padding: 12px 24px;
-  border-radius: 5px;
+  border-radius: 6px;
   cursor: pointer;
-  font-size: 16px;
-  font-weight: 500;
-  transition: background-color 0.3s;
+  font-size: 15px;
+  font-weight: 600;
+  transition: background-color 0.2s;
 }
 
 .events-submit-button:hover {
-  background-color: #357ae8;
+  background-color: #0d47a1;
 }
 
 .events-cancel-button {
-  background-color: #f5f5f5;
-  color: #333;
-  border: 1px solid #ddd;
+  background-color: #e4e6eb;
+  color: #050505;
+  border: none;
   padding: 12px 24px;
-  border-radius: 5px;
+  border-radius: 6px;
   cursor: pointer;
-  font-size: 16px;
-  transition: background-color 0.3s;
+  font-size: 15px;
+  font-weight: 600;
+  transition: background-color 0.2s;
 }
 
 .events-cancel-button:hover {
-  background-color: #e8e8e8;
+  background-color: #d8dadf;
 }
 
 .events-loading,
@@ -219,7 +243,10 @@
   overflow-x: auto;
   background: white;
   border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  border: 1px solid #e4e6eb;
+  margin-left: 24px;
+  padding: 0;
 }
 
 .events-table {
@@ -228,26 +255,34 @@
 }
 
 .events-table thead {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: #1565c0;
   color: white;
 }
 
 .events-table th {
   padding: 16px;
-  text-align: left;
+  text-align: center;
   font-weight: 600;
   font-size: 14px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
 
+.events-table th:first-child {
+  padding-left: 16px;
+}
+
+.events-table th:last-child {
+  text-align: center;
+}
+
 .events-table tbody tr {
-  border-bottom: 1px solid #e0e0e0;
+  border-bottom: 1px solid #e4e6eb;
   transition: background-color 0.2s;
 }
 
 .events-table tbody tr:hover {
-  background-color: #f9f9f9;
+  background-color: #f2f3f5;
 }
 
 .events-table tbody tr:last-child {
@@ -257,7 +292,15 @@
 .events-table td {
   padding: 16px;
   font-size: 14px;
-  color: #333;
+  color: #050505;
+}
+
+.events-table td:first-child {
+  padding-left: 16px;
+}
+
+.events-table td:last-child {
+  text-align: center;
 }
 
 .event-title-cell {
@@ -267,12 +310,13 @@
 .event-title-cell strong {
   display: block;
   margin-bottom: 4px;
-  color: #333;
+  color: #050505;
+  font-weight: 600;
 }
 
 .event-description {
-  font-size: 12px;
-  color: #666;
+  font-size: 13px;
+  color: #65676b;
   margin-top: 4px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -280,15 +324,15 @@
 }
 
 .event-time-end {
-  font-size: 12px;
-  color: #666;
+  font-size: 13px;
+  color: #65676b;
   margin-top: 2px;
 }
 
 .event-status-available {
   display: inline-block;
   padding: 4px 12px;
-  background-color: #4caf50;
+  background-color: #2e7d32;
   color: white;
   border-radius: 12px;
   font-size: 12px;
@@ -309,38 +353,40 @@
 .event-actions {
   display: flex;
   gap: 8px;
+  justify-content: center;
+  align-items: center;
 }
 
 .event-register-button {
   padding: 6px 16px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: #1565c0;
   color: white;
   border: none;
   border-radius: 6px;
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: background-color 0.2s;
 }
 
 .event-register-button:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 8px rgba(102, 126, 234, 0.3);
+  background: #0d47a1;
 }
 
 .event-edit-button {
   padding: 6px 16px;
-  background: #f5f5f5;
-  color: #333;
-  border: 1px solid #ddd;
+  background: #e4e6eb;
+  color: #050505;
+  border: none;
   border-radius: 6px;
   font-size: 14px;
+  font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: background-color 0.2s;
 }
 
 .event-edit-button:hover {
-  background: #e0e0e0;
+  background: #d8dadf;
 }
 
 @media (max-width: 768px) {

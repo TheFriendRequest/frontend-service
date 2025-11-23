@@ -7,12 +7,13 @@
 
 /* Top Header */
 .App-top-header {
-  background-color: #282c34;
+  background-color: white;
   padding: 1rem 2rem;
   position: sticky;
   top: 0;
   z-index: 100;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  border-bottom: 1px solid #e0e0e0;
 } 
 
 .App-header-content {
@@ -23,10 +24,22 @@
   margin: 0 auto;
 }
 
+.App-header-logo-container {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.App-header-logo {
+  height: 40px;
+  width: auto;
+  object-fit: contain;
+}
+
 .App-logo-small {
   font-size: 1.5rem;
   font-weight: bold;
-  color: white;
+  color: #1565c0;
 }
 
 .App-header-right {
@@ -41,7 +54,7 @@
   padding: 0.5rem 1rem;
   font-size: 1rem;
   cursor: pointer;
-  background-color: #4285f4;
+  background-color: #1565c0;
   color: white;
   border: none;
   border-radius: 5px;
@@ -49,7 +62,7 @@
 }
 
 .App-login-button:hover {
-  background-color: #357ae8;
+  background-color: #0d47a1;
 }
 
 /* Profile Picture */
@@ -62,7 +75,7 @@
   height: 40px;
   border-radius: 50%;
   cursor: pointer;
-  border: 2px solid white;
+  border: 2px solid #1565c0;
   transition: transform 0.2s;
   object-fit: cover;
 }
@@ -75,11 +88,11 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background-color: #4285f4;
+  background-color: #1565c0;
   color: white;
   font-weight: bold;
   font-size: 18px;
-  border: 2px solid white;
+  border: 2px solid #1565c0;
 }
 
 /* Dropdown Menu */
@@ -132,13 +145,13 @@
 }
 
 .App-nav-button:hover {
-  color: #4285f4;
+  color: #1565c0;
   background-color: #f0f0f0;
 }
 
 .App-nav-button.active {
-  color: #4285f4;
-  border-bottom-color: #4285f4;
+  color: #1565c0;
+  border-bottom-color: #1565c0;
   font-weight: 500;
 }
 
@@ -156,12 +169,18 @@
 }
 
 .App-main.home-page {
-  background-color: #282c34;
+  background-color: #fafafa;
   justify-content: center;
 }
 
+.App-main.profile-page {
+  align-items: flex-start;
+  padding: 0;
+}
+
 .App-logo {
-  height: 40vmin;
+  height: 120px;
+  width: auto;
   pointer-events: none;
   margin-bottom: 2rem;
   /* Animation removed - logo stays static */
@@ -169,16 +188,42 @@
 
 .App-welcome-text {
   font-size: calc(10px + 2vmin);
-  color: white;
+  color: #333;
   margin: 0;
 }
 
 .App-welcome-subtext {
   font-size: calc(8px + 1.5vmin);
-  color: #aaa;
+  color: #666;
   margin-top: 1rem;
 }
 
 .App-link {
   color: #61dafb;
+}
+
+/* Login Modal */
+.App-login-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  backdrop-filter: blur(2px);
+}
+
+.App-login-modal {
+  background: white;
+  border-radius: 8px;
+  padding: 0;
+  max-width: 400px;
+  width: 90%;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1), 0 8px 16px rgba(0, 0, 0, 0.1);
 }

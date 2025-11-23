@@ -17,7 +17,7 @@ interface Interest {
 }
 
 const Profile: React.FC = () => {
-  const { idToken, currentUser, userProfile, syncUserToBackend } = useAuth();
+  const { idToken, currentUser, userProfile } = useAuth();
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [allInterests, setAllInterests] = useState<Interest[]>([]);
   const [userInterests, setUserInterests] = useState<number[]>([]);
@@ -41,6 +41,7 @@ const Profile: React.FC = () => {
     type: 'personal' as 'class' | 'event' | 'personal'
   });
   const [showScheduleForm, setShowScheduleForm] = useState(false);
+  const [activeSection, setActiveSection] = useState<'profile' | 'schedules' | 'interests'>('profile');
 
   const compositeServiceUrl = process.env.REACT_APP_COMPOSITE_SERVICE_URL || 'http://localhost:8000';
 
@@ -85,8 +86,15 @@ const Profile: React.FC = () => {
 
       // Log eTag from response (if present)
       const etag = response.headers.get('ETag') || response.headers.get('etag');
+      console.log('👤 Profile Service - Response Headers (GET schedules):', {
+        'ETag': etag || '(not found)',
+        'All Headers': Array.from(response.headers.entries()),
+        'URL': `${compositeServiceUrl}/api/users/${userProfile.user_id}/schedules`
+      });
       if (etag) {
-        console.log('👤 Profile Service - eTag received (GET schedules):', etag);
+        console.log('✅ eTag received:', etag);
+      } else {
+        console.warn('⚠️  eTag not found in response headers');
       }
 
       if (response.ok) {
@@ -102,32 +110,52 @@ const Profile: React.FC = () => {
     if (!idToken || !userProfile?.user_id) return;
     
     try {
-      // Fetch all available interests
+      // Fetch all available interests - this should always succeed
       const allResponse = await fetch(`${compositeServiceUrl}/api/users/interests`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${idToken}`
         }
       });
+      
       if (allResponse.ok) {
         const allData = await allResponse.json();
         setAllInterests(Array.isArray(allData) ? allData : []);
+      } else {
+        console.error('Failed to fetch all interests:', allResponse.status, allResponse.statusText);
+        // Still try to fetch user interests even if all interests failed
       }
 
-      // Fetch user's interests
-      const userResponse = await fetch(`${compositeServiceUrl}/api/users/${userProfile.user_id}/interests`, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${idToken}`
+      // Fetch user's interests - if this fails or returns empty, userInterests will be empty array
+      try {
+        const userResponse = await fetch(`${compositeServiceUrl}/api/users/${userProfile.user_id}/interests`, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${idToken}`
+          }
+        });
+        
+        if (userResponse.ok) {
+          const userData = await userResponse.json();
+          const interestIds = Array.isArray(userData) ? userData.map((i: Interest) => i.interest_id) : [];
+          setUserInterests(interestIds);
+        } else if (userResponse.status === 404) {
+          // User has no interests yet - this is fine, set empty array
+          setUserInterests([]);
+        } else {
+          console.error('Failed to fetch user interests:', userResponse.status, userResponse.statusText);
+          // Default to empty array if fetch fails
+          setUserInterests([]);
         }
-      });
-      if (userResponse.ok) {
-        const userData = await userResponse.json();
-        const interestIds = Array.isArray(userData) ? userData.map((i: Interest) => i.interest_id) : [];
-        setUserInterests(interestIds);
+      } catch (userError) {
+        console.error('Error fetching user interests:', userError);
+        // Default to empty array if there's an error
+        setUserInterests([]);
       }
     } catch (error) {
       console.error('Error fetching interests:', error);
+      // Ensure we at least try to show available interests
+      setUserInterests([]);
     }
   }, [idToken, userProfile, compositeServiceUrl]);
 
@@ -339,193 +367,225 @@ const Profile: React.FC = () => {
       {error && <div className="profile-error">{error}</div>}
       {success && <div className="profile-success">{success}</div>}
 
-      {/* Profile Information */}
-      <div className="profile-section">
-        <h3>Personal Information</h3>
-        <form onSubmit={handleSaveProfile}>
-          <div className="profile-form-row">
-            <div className="profile-form-group">
-              <label htmlFor="first_name">First Name</label>
-              <input
-                type="text"
-                id="first_name"
-                name="first_name"
-                value={profileData.first_name}
-                onChange={handleProfileChange}
-                required
-              />
-            </div>
-            <div className="profile-form-group">
-              <label htmlFor="last_name">Last Name</label>
-              <input
-                type="text"
-                id="last_name"
-                name="last_name"
-                value={profileData.last_name}
-                onChange={handleProfileChange}
-                required
-              />
-            </div>
-          </div>
-          <div className="profile-form-group">
-            <label htmlFor="username">Username</label>
-            <input
-              type="text"
-              id="username"
-              name="username"
-              value={profileData.username}
-              onChange={handleProfileChange}
-              required
-            />
-          </div>
-          <div className="profile-form-group">
-            <label htmlFor="email">Email</label>
-            <input
-              type="email"
-              id="email"
-              name="email"
-              value={profileData.email}
-              onChange={handleProfileChange}
-              required
-            />
-          </div>
-          <div className="profile-form-group">
-            <label htmlFor="profile_picture">Profile Picture URL</label>
-            <input
-              type="url"
-              id="profile_picture"
-              name="profile_picture"
-              value={profileData.profile_picture}
-              onChange={handleProfileChange}
-              placeholder="https://example.com/image.jpg"
-            />
-          </div>
-          <button type="submit" className="profile-save-button" disabled={saving}>
-            {saving ? 'Saving...' : 'Save Profile'}
-          </button>
-        </form>
-      </div>
-
-      {/* Schedules */}
-      <div className="profile-section">
-        <div className="profile-section-header">
-          <h3>Schedules</h3>
-          <button
-            className="profile-add-button"
-            onClick={() => setShowScheduleForm(!showScheduleForm)}
+      {/* Sidebar and Main Content Layout */}
+      <div className="profile-layout">
+        {/* Left Sidebar Navigation */}
+        <div className="profile-sidebar">
+          <div 
+            className={`profile-sidebar-item ${activeSection === 'profile' ? 'active' : ''}`}
+            onClick={() => setActiveSection('profile')}
           >
-            {showScheduleForm ? 'Cancel' : '+ Add Schedule'}
-          </button>
+            <span className="sidebar-icon">👤</span>
+            <span>Profile Info</span>
+          </div>
+          <div 
+            className={`profile-sidebar-item ${activeSection === 'schedules' ? 'active' : ''}`}
+            onClick={() => setActiveSection('schedules')}
+          >
+            <span className="sidebar-icon">📅</span>
+            <span>User Schedules</span>
+          </div>
+          <div 
+            className={`profile-sidebar-item ${activeSection === 'interests' ? 'active' : ''}`}
+            onClick={() => setActiveSection('interests')}
+          >
+            <span className="sidebar-icon">⭐</span>
+            <span>Interests</span>
+          </div>
         </div>
 
-        {showScheduleForm && (
-          <form onSubmit={handleAddSchedule} className="schedule-form">
-            <div className="profile-form-group">
-              <label htmlFor="schedule_title">Title</label>
-              <input
-                type="text"
-                id="schedule_title"
-                name="title"
-                value={scheduleForm.title}
-                onChange={handleScheduleChange}
-                required
-                placeholder="e.g., COMS 4705 Lecture"
-              />
-            </div>
-            <div className="profile-form-row">
-              <div className="profile-form-group">
-                <label htmlFor="schedule_start">Start Time</label>
-                <input
-                  type="datetime-local"
-                  id="schedule_start"
-                  name="start_time"
-                  value={scheduleForm.start_time}
-                  onChange={handleScheduleChange}
-                  required
-                />
-              </div>
-              <div className="profile-form-group">
-                <label htmlFor="schedule_end">End Time</label>
-                <input
-                  type="datetime-local"
-                  id="schedule_end"
-                  name="end_time"
-                  value={scheduleForm.end_time}
-                  onChange={handleScheduleChange}
-                  required
-                />
-              </div>
-            </div>
-            <div className="profile-form-group">
-              <label htmlFor="schedule_type">Type</label>
-              <select
-                id="schedule_type"
-                name="type"
-                value={scheduleForm.type}
-                onChange={handleScheduleChange}
-                required
-              >
-                <option value="class">Class</option>
-                <option value="event">Event</option>
-                <option value="personal">Personal</option>
-              </select>
-            </div>
-            <button type="submit" className="profile-save-button">
-              Add Schedule
-            </button>
-          </form>
-        )}
-
-        <div className="schedules-list">
-          {schedules.length === 0 ? (
-            <div className="profile-empty">No schedules added yet.</div>
-          ) : (
-            schedules.map(schedule => (
-              <div key={schedule.schedule_id} className="schedule-item">
-                <div className="schedule-info">
-                  <strong>{schedule.title}</strong>
-                  <div className="schedule-details">
-                    {formatDateTime(schedule.start_time)} - {formatDateTime(schedule.end_time)}
+        {/* Main Content Area */}
+        <div className="profile-main-content">
+          {/* Profile Information Section */}
+          {activeSection === 'profile' && (
+            <div className="profile-section">
+              <h3>Personal Information</h3>
+              <form onSubmit={handleSaveProfile} className="profile-info-form">
+                <div className="profile-form-row">
+                  <div className="profile-form-group">
+                    <label htmlFor="first_name">First Name</label>
+                    <input
+                      type="text"
+                      id="first_name"
+                      name="first_name"
+                      value={profileData.first_name}
+                      onChange={handleProfileChange}
+                      required
+                    />
                   </div>
-                  <span className={`schedule-type schedule-type-${schedule.type}`}>
-                    {schedule.type}
-                  </span>
+                  <div className="profile-form-group">
+                    <label htmlFor="last_name">Last Name</label>
+                    <input
+                      type="text"
+                      id="last_name"
+                      name="last_name"
+                      value={profileData.last_name}
+                      onChange={handleProfileChange}
+                      required
+                    />
+                  </div>
                 </div>
+                <div className="profile-form-row">
+                  <div className="profile-form-group">
+                    <label htmlFor="username">Username</label>
+                    <input
+                      type="text"
+                      id="username"
+                      name="username"
+                      value={profileData.username}
+                      onChange={handleProfileChange}
+                      required
+                    />
+                  </div>
+                  <div className="profile-form-group">
+                    <label htmlFor="email">Email</label>
+                    <input
+                      type="email"
+                      id="email"
+                      name="email"
+                      value={profileData.email}
+                      onChange={handleProfileChange}
+                      required
+                    />
+                  </div>
+                </div>
+                <button type="submit" className="profile-save-button" disabled={saving}>
+                  {saving ? 'Saving...' : 'Save Profile'}
+                </button>
+              </form>
+            </div>
+          )}
+
+          {/* Schedules Section */}
+          {activeSection === 'schedules' && (
+            <div className="profile-section">
+              <div className="profile-section-header">
+                <h3>Schedules</h3>
                 <button
-                  className="schedule-delete-button"
-                  onClick={() => handleDeleteSchedule(schedule.schedule_id)}
+                  className="profile-add-button"
+                  onClick={() => setShowScheduleForm(!showScheduleForm)}
                 >
-                  Delete
+                  {showScheduleForm ? 'Cancel' : '+ Add'}
                 </button>
               </div>
-            ))
-          )}
-        </div>
-      </div>
 
-      {/* Interests */}
-      <div className="profile-section">
-        <div className="profile-section-header">
-          <h3>Interests</h3>
-          <button
-            className="profile-save-button"
-            onClick={handleSaveInterests}
-            disabled={saving}
-          >
-            {saving ? 'Saving...' : 'Save Interests'}
-          </button>
-        </div>
-        <div className="interests-grid">
-          {allInterests.map(interest => (
-            <label key={interest.interest_id} className="interest-checkbox">
-              <input
-                type="checkbox"
-                checked={userInterests.includes(interest.interest_id)}
-                onChange={() => handleInterestToggle(interest.interest_id)}
-              />
-              <span>{interest.interest_name}</span>
-            </label>
-          ))}
+              {showScheduleForm && (
+                <form onSubmit={handleAddSchedule} className="schedule-form">
+                  <div className="profile-form-group">
+                    <label htmlFor="schedule_title">Title</label>
+                    <input
+                      type="text"
+                      id="schedule_title"
+                      name="title"
+                      value={scheduleForm.title}
+                      onChange={handleScheduleChange}
+                      required
+                      placeholder="e.g., COMS 4705 Lecture"
+                    />
+                  </div>
+                  <div className="profile-form-row">
+                    <div className="profile-form-group">
+                      <label htmlFor="schedule_start">Start</label>
+                      <input
+                        type="datetime-local"
+                        id="schedule_start"
+                        name="start_time"
+                        value={scheduleForm.start_time}
+                        onChange={handleScheduleChange}
+                        required
+                      />
+                    </div>
+                    <div className="profile-form-group">
+                      <label htmlFor="schedule_end">End</label>
+                      <input
+                        type="datetime-local"
+                        id="schedule_end"
+                        name="end_time"
+                        value={scheduleForm.end_time}
+                        onChange={handleScheduleChange}
+                        required
+                      />
+                    </div>
+                  </div>
+                  <div className="profile-form-group">
+                    <label htmlFor="schedule_type">Type</label>
+                    <select
+                      id="schedule_type"
+                      name="type"
+                      value={scheduleForm.type}
+                      onChange={handleScheduleChange}
+                      required
+                    >
+                      <option value="class">Class</option>
+                      <option value="event">Event</option>
+                      <option value="personal">Personal</option>
+                    </select>
+                  </div>
+                  <button type="submit" className="profile-save-button">
+                    Add Schedule
+                  </button>
+                </form>
+              )}
+
+              <div className="schedules-list">
+                {schedules.length === 0 ? (
+                  <div className="profile-empty">No schedules added yet.</div>
+                ) : (
+                  schedules.map(schedule => (
+                    <div key={schedule.schedule_id} className="schedule-item">
+                      <div className="schedule-info">
+                        <strong>{schedule.title}</strong>
+                        <div className="schedule-details">
+                          {formatDateTime(schedule.start_time)} - {formatDateTime(schedule.end_time)}
+                        </div>
+                        <span className={`schedule-type schedule-type-${schedule.type}`}>
+                          {schedule.type}
+                        </span>
+                      </div>
+                      <button
+                        className="schedule-delete-button"
+                        onClick={() => handleDeleteSchedule(schedule.schedule_id)}
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Interests Section */}
+          {activeSection === 'interests' && (
+            <div className="profile-section">
+              <div className="profile-section-header">
+                <h3>Interests</h3>
+                <button
+                  className="profile-save-button"
+                  onClick={handleSaveInterests}
+                  disabled={saving}
+                >
+                  {saving ? 'Saving...' : 'Save'}
+                </button>
+              </div>
+              <div className="interests-grid">
+                {allInterests.length === 0 ? (
+                  <div className="profile-empty">Loading interests...</div>
+                ) : (
+                  allInterests.map(interest => (
+                    <label key={interest.interest_id} className="interest-checkbox">
+                      <input
+                        type="checkbox"
+                        checked={userInterests.includes(interest.interest_id)}
+                        onChange={() => handleInterestToggle(interest.interest_id)}
+                      />
+                      <span>{interest.interest_name}</span>
+                    </label>
+                  ))
+                )}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

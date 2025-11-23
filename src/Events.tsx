@@ -112,12 +112,19 @@ const Events: React.FC = () => {
           'Authorization': `Bearer ${idToken}`
         }
       });
+      console.log('POST request to Events Service', JSON.stringify(response.headers));
 
       // Log eTag from response
       const etag = response.headers.get('ETag') || response.headers.get('etag');
+      console.log('📅 Events Service - Response Headers:', {
+        'ETag': etag || '(not found)',
+        'All Headers': Array.from(response.headers.entries()),
+        'URL': `${compositeServiceUrl}/api/events`
+      });
       if (etag) {
-        console.log('📅 Events Service - eTag received:', etag);
-        console.log('   URL:', `${compositeServiceUrl}/api/events`);
+        console.log('✅ eTag received:', etag);
+      } else {
+        console.warn('⚠️  eTag not found in response headers');
       }
 
       if (!response.ok) {
@@ -214,6 +221,7 @@ const Events: React.FC = () => {
       });
 
       // Log eTag from response (if present)
+      console.log('POST request to Events Service', response);
       const etag = response.headers.get('ETag') || response.headers.get('etag');
       if (etag) {
         console.log('📅 Events Service - eTag received (POST):', etag);

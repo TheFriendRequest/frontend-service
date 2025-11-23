@@ -7,18 +7,22 @@ import Login from './Login';
 import logo from './file.svg';
 import './App.css';
 
-type Page = 'home' | 'feed' | 'events' | 'profile';
+type Page = 'home' | 'feed' | 'events' | 'profile' | 'login';
 
 function App() {
   const { currentUser, userProfile, loading, logout } = useAuth();
   const [showDropdown, setShowDropdown] = useState(false);
-  const [currentPage, setCurrentPage] = useState<Page>('feed');
+  const [currentPage, setCurrentPage] = useState<Page>('home');
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Set initial page to feed when user logs in
   useEffect(() => {
-    if (currentUser && currentPage === 'home') {
-      setCurrentPage('feed');
+    if (currentUser) {
+      if (currentPage === 'login' || currentPage === 'home') {
+        setCurrentPage('feed');
+      }
+    } else if (!currentUser && currentPage !== 'login') {
+      setCurrentPage('home');
     }
   }, [currentUser]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -62,114 +66,127 @@ function App() {
     );
   }
 
-  // Show login page if user is not authenticated
-  if (!currentUser) {
-    return <Login />;
-  }
-
   return (
     <div className="App">
-      {/* Header */}
+      {/* Header - Hide on login page */}
+      {currentPage !== 'login' && (
       <header className="App-top-header">
         <div className="App-header-content">
-          <div className="App-logo-small">FriendRequest</div>
+          <div className="App-header-logo-container">
+            <img src={logo} className="App-header-logo" alt="logo" />
+            <div className="App-logo-small">FriendRequest</div>
+          </div>
           <div className="App-header-right">
-            <div className="App-profile-container" ref={dropdownRef}>
-              {currentUser?.photoURL ? (
-                <img
-                  src={currentUser.photoURL}
-                  alt="Profile"
-                  className="App-profile-pic"
-                  crossOrigin="anonymous"
-                  referrerPolicy="no-referrer"
-                  onClick={() => setShowDropdown(!showDropdown)}
-                  onError={(e) => {
-                    // Fallback to default avatar if image fails to load
-                    const target = e.target as HTMLImageElement;
-                    target.onerror = null; // Prevent infinite loop
-                    console.error('Profile image failed to load:', currentUser.photoURL);
-                    const displayName = userProfile?.first_name && userProfile?.last_name 
-                      ? `${userProfile.first_name} ${userProfile.last_name}`
-                      : (userProfile?.email || currentUser?.email || 'User');
-                    target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=4285f4&color=fff&size=40`;
-                  }}
-                  onLoad={() => {
-                    console.log('Profile image loaded successfully:', currentUser.photoURL);
-                  }}
-                />
-              ) : (
-                <div
-                  className="App-profile-pic App-profile-placeholder"
-                  onClick={() => setShowDropdown(!showDropdown)}
-                >
-                  {(userProfile?.first_name?.[0] || userProfile?.email?.[0] || currentUser?.displayName?.[0] || currentUser?.email?.[0] || 'U').toUpperCase()}
-                </div>
-              )}
-              {showDropdown && (
-                <div className="App-dropdown">
-                  <div className="App-dropdown-item" onClick={handleProfile}>
-                    Profile
+            {currentUser ? (
+              <div className="App-profile-container" ref={dropdownRef}>
+                {currentUser?.photoURL ? (
+                  <img
+                    src={currentUser.photoURL}
+                    alt="Profile"
+                    className="App-profile-pic"
+                    crossOrigin="anonymous"
+                    referrerPolicy="no-referrer"
+                    onClick={() => setShowDropdown(!showDropdown)}
+                    onError={(e) => {
+                      // Fallback to default avatar if image fails to load
+                      const target = e.target as HTMLImageElement;
+                      target.onerror = null; // Prevent infinite loop
+                      console.error('Profile image failed to load:', currentUser.photoURL);
+                      const displayName = userProfile?.first_name && userProfile?.last_name 
+                        ? `${userProfile.first_name} ${userProfile.last_name}`
+                        : (userProfile?.email || currentUser?.email || 'User');
+                      target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=4285f4&color=fff&size=40`;
+                    }}
+                    onLoad={() => {
+                      console.log('Profile image loaded successfully:', currentUser.photoURL);
+                    }}
+                  />
+                ) : (
+                  <div
+                    className="App-profile-pic App-profile-placeholder"
+                    onClick={() => setShowDropdown(!showDropdown)}
+                  >
+                    {(userProfile?.first_name?.[0] || userProfile?.email?.[0] || currentUser?.displayName?.[0] || currentUser?.email?.[0] || 'U').toUpperCase()}
                   </div>
-                  <div className="App-dropdown-item" onClick={handleLogout}>
-                    Logout
+                )}
+                {showDropdown && (
+                  <div className="App-dropdown">
+                    <div className="App-dropdown-item" onClick={handleProfile}>
+                      Profile
+                    </div>
+                    <div className="App-dropdown-item" onClick={handleLogout}>
+                      Logout
+                    </div>
                   </div>
-                </div>
-              )}
-            </div>
+                )}
+              </div>
+            ) : (
+              <button
+                className="App-login-button"
+                onClick={() => setCurrentPage('login')}
+              >
+                Login
+              </button>
+            )}
           </div>
         </div>
       </header>
+      )}
 
-      {/* Navigation */}
-      <nav className="App-nav">
-        <button 
-          className={`App-nav-button ${currentPage === 'home' ? 'active' : ''}`}
-          onClick={() => setCurrentPage('home')}
-        >
-          Home
-        </button>
-        <button 
-          className={`App-nav-button ${currentPage === 'feed' ? 'active' : ''}`}
-          onClick={() => setCurrentPage('feed')}
-        >
-          Feed
-        </button>
-        <button 
-          className={`App-nav-button ${currentPage === 'events' ? 'active' : ''}`}
-          onClick={() => setCurrentPage('events')}
-        >
-          Events
-        </button>
-        <button 
-          className={`App-nav-button ${currentPage === 'profile' ? 'active' : ''}`}
-          onClick={() => setCurrentPage('profile')}
-        >
-          Profile
-        </button>
-      </nav>
+      {/* Navigation - Only show if user is logged in */}
+      {currentUser && currentPage !== 'login' && (
+        <nav className="App-nav">
+          <button 
+            className={`App-nav-button ${currentPage === 'home' ? 'active' : ''}`}
+            onClick={() => setCurrentPage('home')}
+          >
+            Home
+          </button>
+          <button 
+            className={`App-nav-button ${currentPage === 'feed' ? 'active' : ''}`}
+            onClick={() => setCurrentPage('feed')}
+          >
+            Feed
+          </button>
+          <button 
+            className={`App-nav-button ${currentPage === 'events' ? 'active' : ''}`}
+            onClick={() => setCurrentPage('events')}
+          >
+            Events
+          </button>
+        </nav>
+      )}
 
       {/* Main Content */}
-      <div className={`App-main ${currentPage === 'home' ? 'home-page' : ''}`}>
-        {currentPage === 'home' ? (
-          <>
-            <img src={logo} className="App-logo" alt="logo" />
-            <p className="App-welcome-text">
-              Welcome to FriendRequest by SHaaS
-            </p>
-            {currentUser && (
-              <p className="App-welcome-subtext">
-                {userProfile ? `Hello, ${userProfile.first_name} ${userProfile.last_name}!` : 'Welcome!'}
+      {currentPage === 'login' ? (
+        <Login onBack={() => setCurrentPage('home')} />
+      ) : (
+        <div className={`App-main ${currentPage === 'home' ? 'home-page' : ''} ${currentPage === 'profile' ? 'profile-page' : ''}`}>
+          {currentPage === 'home' ? (
+            <>
+              <img src={logo} className="App-logo" alt="logo" />
+              <p className="App-welcome-text">
+                Welcome to FriendRequest by SHaaS
               </p>
-            )}
-          </>
-        ) : currentPage === 'feed' ? (
-          <Feed />
-        ) : currentPage === 'events' ? (
-          <Events />
-        ) : currentPage === 'profile' ? (
-          <Profile />
-        ) : null}
-      </div>
+              {currentUser ? (
+                <p className="App-welcome-subtext">
+                  {userProfile ? `Hello, ${userProfile.first_name} ${userProfile.last_name}!` : 'Welcome!'}
+                </p>
+              ) : (
+                <p className="App-welcome-subtext">
+                  Please sign in to continue
+                </p>
+              )}
+            </>
+          ) : currentPage === 'feed' ? (
+            <Feed />
+          ) : currentPage === 'events' ? (
+            <Events />
+          ) : currentPage === 'profile' ? (
+            <Profile />
+          ) : null}
+        </div>
+      )}
     </div>
   );
 }

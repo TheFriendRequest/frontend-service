@@ -54,9 +54,15 @@ const Feed: React.FC = () => {
 
       // Log eTag from response
       const etag = response.headers.get('ETag') || response.headers.get('etag');
+      console.log('📦 Feed Service - Response Headers:', {
+        'ETag': etag || '(not found)',
+        'All Headers': Array.from(response.headers.entries()),
+        'URL': `${compositeServiceUrl}/api/posts?skip=${offset}&limit=10`
+      });
       if (etag) {
-        console.log('📦 Feed Service - eTag received:', etag);
-        console.log('   URL:', `${compositeServiceUrl}/api/posts?skip=${offset}&limit=10`);
+        console.log('✅ eTag received:', etag);
+      } else {
+        console.warn('⚠️  eTag not found in response headers');
       }
 
       if (!response.ok) {
