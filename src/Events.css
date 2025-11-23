@@ -214,3 +214,142 @@
   margin-right: 8px;
 }
 
+/* Table Styles */
+.events-table-container {
+  overflow-x: auto;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.events-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.events-table thead {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+}
+
+.events-table th {
+  padding: 16px;
+  text-align: left;
+  font-weight: 600;
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.events-table tbody tr {
+  border-bottom: 1px solid #e0e0e0;
+  transition: background-color 0.2s;
+}
+
+.events-table tbody tr:hover {
+  background-color: #f9f9f9;
+}
+
+.events-table tbody tr:last-child {
+  border-bottom: none;
+}
+
+.events-table td {
+  padding: 16px;
+  font-size: 14px;
+  color: #333;
+}
+
+.event-title-cell {
+  max-width: 300px;
+}
+
+.event-title-cell strong {
+  display: block;
+  margin-bottom: 4px;
+  color: #333;
+}
+
+.event-description {
+  font-size: 12px;
+  color: #666;
+  margin-top: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.event-time-end {
+  font-size: 12px;
+  color: #666;
+  margin-top: 2px;
+}
+
+.event-status-available {
+  display: inline-block;
+  padding: 4px 12px;
+  background-color: #4caf50;
+  color: white;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.event-status-conflict {
+  display: inline-block;
+  padding: 4px 12px;
+  background-color: #f44336;
+  color: white;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: help;
+}
+
+.event-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.event-register-button {
+  padding: 6px 16px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.event-register-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(102, 126, 234, 0.3);
+}
+
+.event-edit-button {
+  padding: 6px 16px;
+  background: #f5f5f5;
+  color: #333;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.event-edit-button:hover {
+  background: #e0e0e0;
+}
+
+@media (max-width: 768px) {
+  .events-table-container {
+    overflow-x: scroll;
+  }
+  
+  .events-table {
+    min-width: 800px;
+  }
+}
+

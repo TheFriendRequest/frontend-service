@@ -12,6 +12,9 @@ interface Event {
   capacity: number | null;
   created_by: number;
   created_at: string;
+  interests?: Array<{ interest_id: number; interest_name: string }>;
+  canRegister?: boolean;
+  conflictReason?: string;
 }
 
 interface EventFormData {
@@ -23,9 +26,19 @@ interface EventFormData {
   capacity: string;
 }
 
+interface Schedule {
+  schedule_id: number;
+  user_id: number;
+  start_time: string;
+  end_time: string;
+  type: 'class' | 'event' | 'personal';
+  title: string;
+}
+
 const Events: React.FC = () => {
-  const { idToken, currentUser } = useAuth();
+  const { idToken, currentUser, userProfile } = useAuth();
   const [events, setEvents] = useState<Event[]>([]);
+  const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [editingEvent, setEditingEvent] = useState<Event | null>(null);
@@ -40,7 +53,51 @@ const Events: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  const eventServiceUrl = process.env.REACT_APP_EVENTS_SERVICE_URL || 'http://localhost:8080';
+  const compositeServiceUrl = process.env.REACT_APP_COMPOSITE_SERVICE_URL || 'http://localhost:8000';
+
+  const fetchSchedules = useCallback(async () => {
+    if (!idToken || !userProfile?.user_id) return;
+    
+    try {
+      const response = await fetch(`${compositeServiceUrl}/api/users/${userProfile.user_id}/schedules`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${idToken}`
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setSchedules(Array.isArray(data) ? data : []);
+      }
+    } catch (error) {
+      console.error('Error fetching schedules:', error);
+    }
+  }, [idToken, userProfile, compositeServiceUrl]);
+
+  const checkEventConflict = (event: Event): { canRegister: boolean; reason?: string } => {
+    const eventStart = new Date(event.start_time);
+    const eventEnd = new Date(event.end_time);
+
+    for (const schedule of schedules) {
+      const scheduleStart = new Date(schedule.start_time);
+      const scheduleEnd = new Date(schedule.end_time);
+
+      // Check if event overlaps with schedule
+      if (
+        (eventStart >= scheduleStart && eventStart < scheduleEnd) ||
+        (eventEnd > scheduleStart && eventEnd <= scheduleEnd) ||
+        (eventStart <= scheduleStart && eventEnd >= scheduleEnd)
+      ) {
+        return {
+          canRegister: false,
+          reason: `Conflicts with ${schedule.title} (${schedule.type})`
+        };
+      }
+    }
+
+    return { canRegister: true };
+  };
 
   const fetchEvents = useCallback(async () => {
     if (!idToken) return;
@@ -48,57 +105,60 @@ const Events: React.FC = () => {
     try {
       setLoading(true);
       setError(null);
-      console.log('Fetching events from:', `${eventServiceUrl}/events/`);
       
-      const response = await fetch(`${eventServiceUrl}/events/`, {
+      const response = await fetch(`${compositeServiceUrl}/api/events`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${idToken}`
         }
       });
 
+      // Log eTag from response
+      const etag = response.headers.get('ETag') || response.headers.get('etag');
+      if (etag) {
+        console.log('📅 Events Service - eTag received:', etag);
+        console.log('   URL:', `${compositeServiceUrl}/api/events`);
+      }
+
       if (!response.ok) {
-        // Try to get error details from response
-        let errorMessage = 'Failed to fetch events';
-        try {
-          const errorData = await response.json();
-          errorMessage = errorData.detail || errorData.message || errorMessage;
-        } catch {
-          // If response is not JSON, use status text
-          errorMessage = `Backend error: ${response.status} ${response.statusText}`;
-        }
-        
-        // Distinguish between different error types
-        if (response.status === 0 || response.status >= 500) {
-          throw new Error(`Cannot connect to Event-Service. Please ensure it's running on ${eventServiceUrl}`);
-        } else if (response.status === 401 || response.status === 403) {
-          throw new Error('Authentication failed. Please try logging in again.');
-        } else {
-          throw new Error(errorMessage);
-        }
+        throw new Error('Failed to fetch events');
       }
 
       const data = await response.json();
-      setEvents(data);
-      setError(null); // Clear any previous errors
+      // Composite service returns {items: [...], total, skip, limit, has_more}
+      // Direct service returns array or {items: [...]}
+      const eventsList = Array.isArray(data) ? data : (data.items || []);
+      
+      // Check conflicts for each event
+      const eventsWithConflicts = eventsList.map((event: Event) => {
+        const conflictCheck = checkEventConflict(event);
+        return {
+          ...event,
+          canRegister: conflictCheck.canRegister,
+          conflictReason: conflictCheck.reason
+        };
+      });
+      
+      setEvents(eventsWithConflicts);
     } catch (error: any) {
       console.error('Error fetching events:', error);
-      // Handle network errors specifically
-      if (error instanceof TypeError && error.message.includes('fetch')) {
-        setError(`Cannot connect to Event-Service at ${eventServiceUrl}. Please ensure Event-Service is running.`);
-      } else {
-        setError(error.message || 'Failed to load events');
-      }
+      setError(error.message || 'Failed to load events');
     } finally {
       setLoading(false);
     }
-  }, [idToken, eventServiceUrl]);
+  }, [idToken, compositeServiceUrl, schedules]);
 
   useEffect(() => {
-    if (idToken) {
+    if (idToken && userProfile) {
+      fetchSchedules();
+    }
+  }, [idToken, userProfile, fetchSchedules]);
+
+  useEffect(() => {
+    if (idToken && schedules.length >= 0) {
       fetchEvents();
     }
-  }, [idToken, fetchEvents]);
+  }, [idToken, schedules, fetchEvents]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -132,7 +192,6 @@ const Events: React.FC = () => {
 
     try {
       setError(null);
-      // Convert datetime-local format to ISO format
       const startTimeISO = formData.start_time ? new Date(formData.start_time).toISOString() : '';
       const endTimeISO = formData.end_time ? new Date(formData.end_time).toISOString() : '';
       
@@ -145,7 +204,7 @@ const Events: React.FC = () => {
         capacity: formData.capacity ? parseInt(formData.capacity) : null
       };
 
-      const response = await fetch(`${eventServiceUrl}/events/`, {
+      const response = await fetch(`${compositeServiceUrl}/api/events`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -154,25 +213,15 @@ const Events: React.FC = () => {
         body: JSON.stringify(eventData)
       });
 
+      // Log eTag from response (if present)
+      const etag = response.headers.get('ETag') || response.headers.get('etag');
+      if (etag) {
+        console.log('📅 Events Service - eTag received (POST):', etag);
+      }
+
       if (!response.ok) {
-        // Try to get error details from response
-        let errorMessage = 'Failed to create event';
-        try {
-          const errorData = await response.json();
-          errorMessage = errorData.detail || errorData.message || errorMessage;
-        } catch {
-          // If response is not JSON, use status text
-          errorMessage = `Backend error: ${response.status} ${response.statusText}`;
-        }
-        
-        // Distinguish between different error types
-        if (response.status === 0 || response.status >= 500) {
-          throw new Error(`Cannot connect to Event-Service. Please ensure it's running on ${eventServiceUrl}`);
-        } else if (response.status === 401 || response.status === 403) {
-          throw new Error('Authentication failed. Please try logging in again.');
-        } else {
-          throw new Error(errorMessage);
-        }
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Failed to create event');
       }
 
       setSuccess('Event created successfully!');
@@ -180,12 +229,7 @@ const Events: React.FC = () => {
       fetchEvents();
     } catch (error: any) {
       console.error('Error creating event:', error);
-      // Handle network errors specifically
-      if (error instanceof TypeError && error.message.includes('fetch')) {
-        setError(`Cannot connect to Event-Service at ${eventServiceUrl}. Please ensure Event-Service is running.`);
-      } else {
-        setError(error.message || 'Failed to create event');
-      }
+      setError(error.message || 'Failed to create event');
     }
   };
 
@@ -212,7 +256,7 @@ const Events: React.FC = () => {
         updateData.capacity = formData.capacity ? parseInt(formData.capacity) : null;
       }
 
-      const response = await fetch(`${eventServiceUrl}/events/${editingEvent.event_id}`, {
+      const response = await fetch(`${compositeServiceUrl}/api/events/${editingEvent.event_id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -221,25 +265,15 @@ const Events: React.FC = () => {
         body: JSON.stringify(updateData)
       });
 
+      // Log eTag from response (if present)
+      const etag = response.headers.get('ETag') || response.headers.get('etag');
+      if (etag) {
+        console.log('📅 Events Service - eTag received (PUT):', etag);
+      }
+
       if (!response.ok) {
-        // Try to get error details from response
-        let errorMessage = 'Failed to update event';
-        try {
-          const errorData = await response.json();
-          errorMessage = errorData.detail || errorData.message || errorMessage;
-        } catch {
-          // If response is not JSON, use status text
-          errorMessage = `Backend error: ${response.status} ${response.statusText}`;
-        }
-        
-        // Distinguish between different error types
-        if (response.status === 0 || response.status >= 500) {
-          throw new Error(`Cannot connect to Event-Service. Please ensure it's running on ${eventServiceUrl}`);
-        } else if (response.status === 401 || response.status === 403) {
-          throw new Error('Authentication failed. Please try logging in again.');
-        } else {
-          throw new Error(errorMessage);
-        }
+        const errorData = await response.json();
+        throw new Error(errorData.detail || 'Failed to update event');
       }
 
       setSuccess('Event updated successfully!');
@@ -247,18 +281,12 @@ const Events: React.FC = () => {
       fetchEvents();
     } catch (error: any) {
       console.error('Error updating event:', error);
-      // Handle network errors specifically
-      if (error instanceof TypeError && error.message.includes('fetch')) {
-        setError(`Cannot connect to Event-Service at ${eventServiceUrl}. Please ensure Event-Service is running.`);
-      } else {
-        setError(error.message || 'Failed to update event');
-      }
+      setError(error.message || 'Failed to update event');
     }
   };
 
   const handleEditClick = (event: Event) => {
     setEditingEvent(event);
-    // Convert ISO datetime to datetime-local format (YYYY-MM-DDTHH:mm)
     const formatForInput = (isoString: string) => {
       const date = new Date(isoString);
       const year = date.getFullYear();
@@ -280,17 +308,20 @@ const Events: React.FC = () => {
     setShowCreateForm(true);
   };
 
-  const formatDateTime = (dateTimeString: string) => {
+  const formatDate = (dateTimeString: string) => {
     const date = new Date(dateTimeString);
-    return date.toLocaleString();
+    return date.toLocaleDateString();
+  };
+
+  const formatTime = (dateTimeString: string) => {
+    const date = new Date(dateTimeString);
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
   if (!currentUser) {
     return (
       <div className="events-container">
-        <div className="events-message">
-          Please log in to view and manage events.
-        </div>
+        <div className="events-message">Please log in to view and manage events.</div>
       </div>
     );
   }
@@ -414,41 +445,73 @@ const Events: React.FC = () => {
       ) : events.length === 0 ? (
         <div className="events-message">No events found. Create your first event!</div>
       ) : (
-        <div className="events-list">
-          {events.map((event) => (
-            <div key={event.event_id} className="events-card">
-              <div className="events-card-header">
-                <h3>{event.title}</h3>
-                <button
-                  className="events-edit-button"
-                  onClick={() => handleEditClick(event)}
-                >
-                  Edit
-                </button>
-              </div>
-              {event.description && (
-                <p className="events-description">{event.description}</p>
-              )}
-              <div className="events-details">
-                {event.location && (
-                  <div className="events-detail-item">
-                    <strong>Location:</strong> {event.location}
-                  </div>
-                )}
-                <div className="events-detail-item">
-                  <strong>Start:</strong> {formatDateTime(event.start_time)}
-                </div>
-                <div className="events-detail-item">
-                  <strong>End:</strong> {formatDateTime(event.end_time)}
-                </div>
-                {event.capacity && (
-                  <div className="events-detail-item">
-                    <strong>Capacity:</strong> {event.capacity}
-                  </div>
-                )}
-              </div>
-            </div>
-          ))}
+        <div className="events-table-container">
+          <table className="events-table">
+            <thead>
+              <tr>
+                <th>Title</th>
+                <th>Date</th>
+                <th>Time</th>
+                <th>Location</th>
+                <th>Capacity</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {events.map((event) => (
+                <tr key={event.event_id}>
+                  <td>
+                    <div className="event-title-cell">
+                      <strong>{event.title}</strong>
+                      {event.description && (
+                        <div className="event-description">{event.description}</div>
+                      )}
+                    </div>
+                  </td>
+                  <td>{formatDate(event.start_time)}</td>
+                  <td>
+                    <div>{formatTime(event.start_time)}</div>
+                    <div className="event-time-end">to {formatTime(event.end_time)}</div>
+                  </td>
+                  <td>{event.location || '-'}</td>
+                  <td>{event.capacity || 'Unlimited'}</td>
+                  <td>
+                    {event.canRegister ? (
+                      <span className="event-status-available">Available</span>
+                    ) : (
+                      <span className="event-status-conflict" title={event.conflictReason}>
+                        Conflict
+                      </span>
+                    )}
+                  </td>
+                  <td>
+                    <div className="event-actions">
+                      {event.canRegister && (
+                        <button 
+                          className="event-register-button"
+                          onClick={() => {
+                            // TODO: Implement registration
+                            alert('Registration functionality to be implemented');
+                          }}
+                        >
+                          Register
+                        </button>
+                      )}
+                      {event.created_by === userProfile?.user_id && (
+                        <button
+                          className="event-edit-button"
+                          onClick={() => handleEditClick(event)}
+                        >
+                          Edit
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
     </div>
@@ -456,4 +519,3 @@ const Events: React.FC = () => {
 };
 
 export default Events;
-

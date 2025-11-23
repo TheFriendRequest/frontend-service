@@ -3,6 +3,8 @@ import React, { createContext, useContext, useEffect, useState, useCallback } fr
 import {
   User,
   signInWithPopup,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
   signOut,
   onAuthStateChanged,
   IdTokenResult
@@ -26,6 +28,13 @@ interface AuthContextType {
   idToken: string | null;
   loading: boolean;
   signInWithGoogle: () => Promise<void>;
+  signInWithEmail: (email: string, password: string) => Promise<void>;
+  signUpWithEmail: (email: string, password: string, userData: {
+    first_name: string;
+    last_name: string;
+    username: string;
+    email: string;
+  }) => Promise<void>;
   logout: () => Promise<void>;
   syncUserToBackend: (userData: any) => Promise<void>;
 }
@@ -72,11 +81,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         }, token);
       } catch (syncError: any) {
         // Log the error but don't throw - user is still logged in via Firebase
-        console.warn('Failed to sync user to backend, but login succeeded:', syncError);
+        console.error('Failed to sync user to backend:', syncError);
+        console.error('Error details:', syncError.message);
         // Try to fetch profile anyway in case user already exists
-        await fetchUserProfile(token).catch(() => {
-          console.warn('Could not fetch user profile from backend');
-        });
+        try {
+          await fetchUserProfile(token);
+        } catch (profileError: any) {
+          console.error('Could not fetch user profile from backend:', profileError);
+          // Show error to user
+          alert('Warning: Could not sync with backend. Some features may not work. Please try refreshing the page.');
+        }
       }
     } catch (error: any) {
       console.error('Error signing in with Google:', error);
@@ -88,6 +102,87 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   };
 
+  const signInWithEmail = async (email: string, password: string) => {
+    try {
+      const result = await signInWithEmailAndPassword(auth, email, password);
+      const user = result.user;
+      
+      // Get ID token
+      const tokenResult: IdTokenResult = await user.getIdTokenResult();
+      const token = tokenResult.token;
+      setIdToken(token);
+      
+      // Fetch user profile from backend
+      await fetchUserProfile(token).catch(() => {
+        console.warn('Could not fetch user profile from backend');
+      });
+    } catch (error: any) {
+      console.error('Error signing in with email:', error);
+      let errorMessage = 'Failed to sign in. Please try again.';
+      if (error.code === 'auth/user-not-found') {
+        errorMessage = 'No account found with this email. Please sign up first.';
+      } else if (error.code === 'auth/wrong-password') {
+        errorMessage = 'Incorrect password. Please try again.';
+      } else if (error.code === 'auth/invalid-email') {
+        errorMessage = 'Invalid email address.';
+      } else if (error.code === 'auth/user-disabled') {
+        errorMessage = 'This account has been disabled.';
+      } else if (error.code && error.code.startsWith('auth/')) {
+        errorMessage = error.message || errorMessage;
+      }
+      throw new Error(errorMessage);
+    }
+  };
+
+  const signUpWithEmail = async (
+    email: string,
+    password: string,
+    userData: {
+      first_name: string;
+      last_name: string;
+      username: string;
+      email: string;
+    }
+  ) => {
+    try {
+      const result = await createUserWithEmailAndPassword(auth, email, password);
+      const user = result.user;
+      
+      // Get ID token
+      const tokenResult: IdTokenResult = await user.getIdTokenResult();
+      const token = tokenResult.token;
+      setIdToken(token);
+      
+      // Sync user to backend
+      try {
+        await syncUserToBackend({
+          first_name: userData.first_name,
+          last_name: userData.last_name,
+          username: userData.username,
+          email: userData.email,
+          profile_picture: null
+        }, token);
+      } catch (syncError: any) {
+        console.warn('Failed to sync user to backend:', syncError);
+        // User is still authenticated via Firebase, but backend sync failed
+        throw new Error('Account created but failed to sync with backend. Please try logging in.');
+      }
+    } catch (error: any) {
+      console.error('Error signing up with email:', error);
+      let errorMessage = 'Failed to create account. Please try again.';
+      if (error.code === 'auth/email-already-in-use') {
+        errorMessage = 'An account with this email already exists. Please sign in instead.';
+      } else if (error.code === 'auth/invalid-email') {
+        errorMessage = 'Invalid email address.';
+      } else if (error.code === 'auth/weak-password') {
+        errorMessage = 'Password is too weak. Please use a stronger password.';
+      } else if (error.code && error.code.startsWith('auth/')) {
+        errorMessage = error.message || errorMessage;
+      }
+      throw new Error(errorMessage);
+    }
+  };
+
   const syncUserToBackend = async (userData: any, token?: string) => {
     const tokenToUse = token || idToken;
     if (!tokenToUse) {
@@ -95,12 +190,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       throw new Error('No authentication token available');
     }
 
-    const usersServiceUrl = process.env.REACT_APP_USERS_SERVICE_URL || 'http://localhost:8000';
+    const compositeServiceUrl = process.env.REACT_APP_COMPOSITE_SERVICE_URL || 'http://localhost:8000';
     
     try {
-      console.log('Syncing user to backend at:', `${usersServiceUrl}/users/sync`);
+      console.log('Syncing user to backend at:', `${compositeServiceUrl}/api/users/sync`);
       
-      const response = await fetch(`${usersServiceUrl}/users/sync`, {
+      const response = await fetch(`${compositeServiceUrl}/api/users/sync`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -122,7 +217,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         
         // Distinguish between different error types
         if (response.status === 0 || response.status >= 500) {
-          throw new Error(`Cannot connect to backend service. Please ensure Users-Service is running on ${usersServiceUrl}`);
+          throw new Error(`Cannot connect to backend service. Please ensure Composite Service is running on ${compositeServiceUrl}`);
         } else if (response.status === 401 || response.status === 403) {
           throw new Error('Authentication failed. Please try logging in again.');
         } else {
@@ -131,14 +226,20 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       }
 
       const result = await response.json();
-      console.log('User synced to backend:', result);
+      console.log('User synced to backend successfully:', result);
       
-      // Fetch user profile from backend
-      await fetchUserProfile(tokenToUse);
+      // Fetch user profile from backend after sync
+      try {
+        await fetchUserProfile(tokenToUse);
+        console.log('User profile fetched successfully after sync');
+      } catch (profileError: any) {
+        console.error('Error fetching profile after sync:', profileError);
+        // Don't throw - profile fetch failure shouldn't break the sync
+      }
     } catch (error: any) {
       // Re-throw with more context if it's not already an Error object
       if (error instanceof TypeError && error.message.includes('fetch')) {
-        throw new Error(`Cannot connect to backend service at ${usersServiceUrl}. Please ensure Users-Service is running.`);
+        throw new Error(`Cannot connect to backend service at ${compositeServiceUrl}. Please ensure Composite Service is running.`);
       }
       throw error;
     }
@@ -147,26 +248,42 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const fetchUserProfile = useCallback(async (token?: string) => {
     const tokenToUse = token || idToken;
     if (!tokenToUse) {
+      console.warn('No token available for fetching user profile');
       return;
     }
 
     try {
-      const usersServiceUrl = process.env.REACT_APP_USERS_SERVICE_URL || 'http://localhost:8000';
-      const response = await fetch(`${usersServiceUrl}/users/me`, {
+      const compositeServiceUrl = process.env.REACT_APP_COMPOSITE_SERVICE_URL || 'http://localhost:8000';
+      console.log('Fetching user profile from:', `${compositeServiceUrl}/api/users/me`);
+      
+      const response = await fetch(`${compositeServiceUrl}/api/users/me`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${tokenToUse}`
         }
       });
 
+      // Log eTag from response (if present)
+      const etag = response.headers.get('ETag') || response.headers.get('etag');
+      if (etag) {
+        console.log('🔐 Auth Service - eTag received (GET /users/me):', etag);
+      }
+
       if (response.ok) {
         const profile = await response.json();
+        console.log('User profile fetched successfully:', profile);
         setUserProfile(profile);
       } else {
-        console.warn(`Failed to fetch user profile: ${response.status} ${response.statusText}`);
+        const errorText = await response.text().catch(() => '');
+        console.error(`Failed to fetch user profile: ${response.status} ${response.statusText}`, errorText);
+        // If 404, user might not be synced yet - that's okay, don't throw
+        if (response.status !== 404) {
+          console.error('Non-404 error fetching profile, will retry later');
+        }
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching user profile:', error);
+      // Don't throw - let it fail silently and retry later
     }
   }, [idToken]);
 
@@ -210,6 +327,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     idToken,
     loading,
     signInWithGoogle,
+    signInWithEmail,
+    signUpWithEmail,
     logout,
     syncUserToBackend
   };
