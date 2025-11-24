@@ -116,10 +116,16 @@ const Feed: React.FC = () => {
 
       if (response.ok) {
         const data = await response.json();
-        setInterests(data);
+        console.log('Fetched interests:', data);
+        setInterests(Array.isArray(data) ? data : []);
+      } else {
+        const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }));
+        console.error('Error fetching interests:', response.status, errorData);
+        setInterests([]); // Set empty array on error so UI doesn't break
       }
     } catch (error) {
       console.error('Error fetching interests:', error);
+      setInterests([]); // Set empty array on error so UI doesn't break
     }
   }, [idToken, compositeServiceUrl]);
 

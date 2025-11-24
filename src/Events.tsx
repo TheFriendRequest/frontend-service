@@ -52,6 +52,12 @@ const Events: React.FC = () => {
   });
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [taskStatus, setTaskStatus] = useState<{
+    taskId: string | null;
+    status: 'pending' | 'processing' | 'completed' | 'failed';
+    message: string;
+  } | null>(null);
 
   const compositeServiceUrl = process.env.REACT_APP_COMPOSITE_SERVICE_URL || 'http://localhost:8000';
 
@@ -75,7 +81,7 @@ const Events: React.FC = () => {
     }
   }, [idToken, userProfile, compositeServiceUrl]);
 
-  const checkEventConflict = (event: Event): { canRegister: boolean; reason?: string } => {
+  const checkEventConflict = useCallback((event: Event): { canRegister: boolean; reason?: string } => {
     const eventStart = new Date(event.start_time);
     const eventEnd = new Date(event.end_time);
 
@@ -97,7 +103,7 @@ const Events: React.FC = () => {
     }
 
     return { canRegister: true };
-  };
+  }, [schedules]);
 
   const fetchEvents = useCallback(async () => {
     if (!idToken) return;
@@ -153,7 +159,7 @@ const Events: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [idToken, compositeServiceUrl, schedules]);
+  }, [idToken, compositeServiceUrl, checkEventConflict]);
 
   useEffect(() => {
     if (idToken && userProfile) {
@@ -190,6 +196,76 @@ const Events: React.FC = () => {
     setSuccess(null);
   };
 
+  const pollTaskStatus = async (taskId: string): Promise<void> => {
+    const maxAttempts = 30; // Poll for up to 30 seconds (30 attempts * 1 second)
+    let attempts = 0;
+
+    const poll = async (): Promise<void> => {
+      try {
+        const response = await fetch(`${compositeServiceUrl}/api/events/tasks/${taskId}`, {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${idToken}`
+          }
+        });
+
+        if (!response.ok) {
+          throw new Error(`Failed to poll task status: ${response.status}`);
+        }
+
+        const taskData = await response.json();
+        console.log('📊 Task Status:', taskData);
+
+        setTaskStatus({
+          taskId: taskData.task_id,
+          status: taskData.status as 'pending' | 'processing' | 'completed' | 'failed',
+          message: taskData.status === 'pending' 
+            ? 'Event creation queued...' 
+            : taskData.status === 'processing'
+            ? 'Creating event...'
+            : taskData.status === 'completed'
+            ? 'Event created successfully!'
+            : `Failed: ${taskData.error || 'Unknown error'}`
+        });
+
+        if (taskData.status === 'completed') {
+          setSuccess('Event created successfully!');
+          resetForm();
+          fetchEvents();
+          // Clear task status after 3 seconds
+          setTimeout(() => {
+            setTaskStatus(null);
+            setIsSubmitting(false);
+          }, 3000);
+          return;
+        } else if (taskData.status === 'failed') {
+          setError(taskData.error || 'Event creation failed');
+          setIsSubmitting(false);
+          setTaskStatus(null);
+          return;
+        }
+
+        // Continue polling if still pending or processing
+        if (attempts < maxAttempts && (taskData.status === 'pending' || taskData.status === 'processing')) {
+          attempts++;
+          setTimeout(poll, 1000); // Poll every 1 second
+        } else {
+          setError('Event creation timed out. Please check if the event was created.');
+          setIsSubmitting(false);
+          setTaskStatus(null);
+        }
+      } catch (error: any) {
+        console.error('Error polling task status:', error);
+        setError(error.message || 'Failed to check event creation status');
+        setIsSubmitting(false);
+        setTaskStatus(null);
+      }
+    };
+
+    // Start polling
+    poll();
+  };
+
   const handleCreateEvent = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!idToken) {
@@ -197,8 +273,16 @@ const Events: React.FC = () => {
       return;
     }
 
+    // Prevent double submission
+    if (isSubmitting) {
+      return;
+    }
+
     try {
+      setIsSubmitting(true);
       setError(null);
+      setSuccess(null);
+      
       const startTimeISO = formData.start_time ? new Date(formData.start_time).toISOString() : '';
       const endTimeISO = formData.end_time ? new Date(formData.end_time).toISOString() : '';
       
@@ -211,7 +295,8 @@ const Events: React.FC = () => {
         capacity: formData.capacity ? parseInt(formData.capacity) : null
       };
 
-      const response = await fetch(`${compositeServiceUrl}/api/events`, {
+      // Use async endpoint
+      const response = await fetch(`${compositeServiceUrl}/api/events/async`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -220,24 +305,43 @@ const Events: React.FC = () => {
         body: JSON.stringify(eventData)
       });
 
-      // Log eTag from response (if present)
-      console.log('POST request to Events Service', response);
-      const etag = response.headers.get('ETag') || response.headers.get('etag');
-      if (etag) {
-        console.log('📅 Events Service - eTag received (POST):', etag);
-      }
+      // Log response status
+      console.log('📅 Event Creation Response:', {
+        status: response.status,
+        statusText: response.statusText,
+        headers: Object.fromEntries(response.headers.entries())
+      });
 
-      if (!response.ok) {
+      // Check for 202 Accepted
+      if (response.status === 202) {
+        console.log('✅ 202 Accepted - Event creation started asynchronously');
+        const taskData = await response.json();
+        console.log('📋 Task Data:', taskData);
+        
+        // Show initial status
+        setTaskStatus({
+          taskId: taskData.task_id,
+          status: 'pending',
+          message: 'Event creation queued...'
+        });
+
+        // Start polling for task status
+        await pollTaskStatus(taskData.task_id);
+      } else if (!response.ok) {
         const errorData = await response.json();
         throw new Error(errorData.detail || 'Failed to create event');
+      } else {
+        // Fallback for non-202 responses (shouldn't happen with async endpoint)
+        setSuccess('Event created successfully!');
+        resetForm();
+        fetchEvents();
+        setIsSubmitting(false);
       }
-
-      setSuccess('Event created successfully!');
-      resetForm();
-      fetchEvents();
     } catch (error: any) {
       console.error('Error creating event:', error);
       setError(error.message || 'Failed to create event');
+      setIsSubmitting(false);
+      setTaskStatus(null);
     }
   };
 
@@ -248,8 +352,15 @@ const Events: React.FC = () => {
       return;
     }
 
+    // Prevent double submission
+    if (isSubmitting) {
+      return;
+    }
+
     try {
+      setIsSubmitting(true);
       setError(null);
+      setSuccess(null);
       const updateData: any = {};
       if (formData.title) updateData.title = formData.title;
       if (formData.description !== undefined) updateData.description = formData.description || null;
@@ -290,6 +401,8 @@ const Events: React.FC = () => {
     } catch (error: any) {
       console.error('Error updating event:', error);
       setError(error.message || 'Failed to update event');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -351,6 +464,30 @@ const Events: React.FC = () => {
 
       {error && <div className="events-error">{error}</div>}
       {success && <div className="events-success">{success}</div>}
+      {taskStatus && (
+        <div className={`events-status ${taskStatus.status === 'failed' ? 'events-error' : taskStatus.status === 'completed' ? 'events-success' : ''}`}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            {taskStatus.status === 'pending' || taskStatus.status === 'processing' ? (
+              <div className="spinner" style={{
+                width: '16px',
+                height: '16px',
+                border: '2px solid #f3f3f3',
+                borderTop: '2px solid #1565c0',
+                borderRadius: '50%',
+                animation: 'spin 1s linear infinite'
+              }}></div>
+            ) : null}
+            <span>
+              {taskStatus.status === 'pending' && '⏳ '}
+              {taskStatus.status === 'processing' && '⚙️ '}
+              {taskStatus.status === 'completed' && '✅ '}
+              {taskStatus.status === 'failed' && '❌ '}
+              {taskStatus.message}
+              {taskStatus.status === 'pending' || taskStatus.status === 'processing' ? ' (Polling...)' : ''}
+            </span>
+          </div>
+        </div>
+      )}
 
       {showCreateForm && (
         <div className="events-form-container">

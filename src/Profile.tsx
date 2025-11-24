@@ -107,7 +107,11 @@ const Profile: React.FC = () => {
   }, [idToken, userProfile, compositeServiceUrl]);
 
   const fetchInterests = useCallback(async () => {
-    if (!idToken || !userProfile?.user_id) return;
+    if (!idToken || !userProfile?.user_id) {
+      setAllInterests([]);
+      setUserInterests([]);
+      return;
+    }
     
     try {
       // Fetch all available interests - this should always succeed
@@ -120,9 +124,13 @@ const Profile: React.FC = () => {
       
       if (allResponse.ok) {
         const allData = await allResponse.json();
+        console.log('✅ Fetched all interests:', allData);
         setAllInterests(Array.isArray(allData) ? allData : []);
       } else {
-        console.error('Failed to fetch all interests:', allResponse.status, allResponse.statusText);
+        const errorText = await allResponse.text().catch(() => 'Unknown error');
+        console.error('❌ Failed to fetch all interests:', allResponse.status, allResponse.statusText, errorText);
+        // Set empty array so we can show error message instead of "Loading..."
+        setAllInterests([]);
         // Still try to fetch user interests even if all interests failed
       }
 
@@ -138,23 +146,27 @@ const Profile: React.FC = () => {
         if (userResponse.ok) {
           const userData = await userResponse.json();
           const interestIds = Array.isArray(userData) ? userData.map((i: Interest) => i.interest_id) : [];
+          console.log('✅ Fetched user interests:', interestIds);
           setUserInterests(interestIds);
         } else if (userResponse.status === 404) {
           // User has no interests yet - this is fine, set empty array
+          console.log('ℹ️ User has no interests yet');
           setUserInterests([]);
         } else {
-          console.error('Failed to fetch user interests:', userResponse.status, userResponse.statusText);
+          const errorText = await userResponse.text().catch(() => 'Unknown error');
+          console.error('❌ Failed to fetch user interests:', userResponse.status, userResponse.statusText, errorText);
           // Default to empty array if fetch fails
           setUserInterests([]);
         }
       } catch (userError) {
-        console.error('Error fetching user interests:', userError);
+        console.error('❌ Error fetching user interests:', userError);
         // Default to empty array if there's an error
         setUserInterests([]);
       }
     } catch (error) {
-      console.error('Error fetching interests:', error);
-      // Ensure we at least try to show available interests
+      console.error('❌ Error fetching interests:', error);
+      // Ensure we set empty arrays so we can show error message instead of "Loading..."
+      setAllInterests([]);
       setUserInterests([]);
     }
   }, [idToken, userProfile, compositeServiceUrl]);
@@ -250,7 +262,6 @@ const Profile: React.FC = () => {
         throw new Error(errorData.detail || 'Failed to add schedule');
       }
 
-      setSuccess('Schedule added successfully!');
       setScheduleForm({
         title: '',
         start_time: '',
@@ -281,7 +292,6 @@ const Profile: React.FC = () => {
         throw new Error('Failed to delete schedule');
       }
 
-      setSuccess('Schedule deleted successfully!');
       fetchSchedules();
     } catch (error: any) {
       console.error('Error deleting schedule:', error);
@@ -329,7 +339,9 @@ const Profile: React.FC = () => {
 
   const formatDateTime = (dateTimeString: string) => {
     const date = new Date(dateTimeString);
-    return date.toLocaleString();
+    const dateStr = date.toLocaleDateString();
+    const timeStr = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    return `${dateStr} ${timeStr}`;
   };
 
   if (!currentUser) {
@@ -527,31 +539,47 @@ const Profile: React.FC = () => {
                 </form>
               )}
 
-              <div className="schedules-list">
-                {schedules.length === 0 ? (
-                  <div className="profile-empty">No schedules added yet.</div>
-                ) : (
-                  schedules.map(schedule => (
-                    <div key={schedule.schedule_id} className="schedule-item">
-                      <div className="schedule-info">
-                        <strong>{schedule.title}</strong>
-                        <div className="schedule-details">
-                          {formatDateTime(schedule.start_time)} - {formatDateTime(schedule.end_time)}
-                        </div>
-                        <span className={`schedule-type schedule-type-${schedule.type}`}>
-                          {schedule.type}
-                        </span>
-                      </div>
-                      <button
-                        className="schedule-delete-button"
-                        onClick={() => handleDeleteSchedule(schedule.schedule_id)}
-                      >
-                        Delete
-                      </button>
-                    </div>
-                  ))
-                )}
-              </div>
+              {schedules.length === 0 ? (
+                <div className="profile-empty">No schedules added yet.</div>
+              ) : (
+                <div className="schedules-table-container">
+                  <table className="schedules-table">
+                    <thead>
+                      <tr>
+                        <th>Title</th>
+                        <th>Start Time</th>
+                        <th>End Time</th>
+                        <th>Type</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {schedules.map(schedule => (
+                        <tr key={schedule.schedule_id}>
+                          <td className="schedule-title-cell">
+                            <strong>{schedule.title}</strong>
+                          </td>
+                          <td>{formatDateTime(schedule.start_time)}</td>
+                          <td>{formatDateTime(schedule.end_time)}</td>
+                          <td>
+                            <span className={`schedule-type schedule-type-${schedule.type}`}>
+                              {schedule.type}
+                            </span>
+                          </td>
+                          <td>
+                            <button
+                              className="schedule-delete-button"
+                              onClick={() => handleDeleteSchedule(schedule.schedule_id)}
+                            >
+                              Delete
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           )}
 
@@ -570,7 +598,21 @@ const Profile: React.FC = () => {
               </div>
               <div className="interests-grid">
                 {allInterests.length === 0 ? (
-                  <div className="profile-empty">Loading interests...</div>
+                  <div className="profile-empty">
+                    {idToken && userProfile ? (
+                      <div>
+                        <p>Unable to load interests. Please check the browser console for errors.</p>
+                        <button 
+                          onClick={() => fetchInterests()} 
+                          style={{ marginTop: '10px', padding: '8px 16px', cursor: 'pointer' }}
+                        >
+                          Retry
+                        </button>
+                      </div>
+                    ) : (
+                      'Please log in to view interests.'
+                    )}
+                  </div>
                 ) : (
                   allInterests.map(interest => (
                     <label key={interest.interest_id} className="interest-checkbox">
