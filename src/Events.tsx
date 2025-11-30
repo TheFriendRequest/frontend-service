@@ -58,6 +58,10 @@ const Events: React.FC = () => {
     status: 'pending' | 'processing' | 'completed' | 'failed';
     message: string;
   } | null>(null);
+  const [skip, setSkip] = useState(0);
+  const [limit] = useState(5);
+  const [total, setTotal] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
 
   const compositeServiceUrl = process.env.REACT_APP_COMPOSITE_SERVICE_URL || 'http://localhost:8000';
 
@@ -105,27 +109,26 @@ const Events: React.FC = () => {
     return { canRegister: true };
   }, [schedules]);
 
-  const fetchEvents = useCallback(async () => {
+  const fetchEvents = useCallback(async (offset: number = 0) => {
     if (!idToken) return;
     
     try {
       setLoading(true);
       setError(null);
       
-      const response = await fetch(`${compositeServiceUrl}/api/events`, {
+      const response = await fetch(`${compositeServiceUrl}/api/events?skip=${offset}&limit=${limit}`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${idToken}`
         }
       });
-      console.log('POST request to Events Service', JSON.stringify(response.headers));
 
       // Log eTag from response
       const etag = response.headers.get('ETag') || response.headers.get('etag');
       console.log('📅 Events Service - Response Headers:', {
         'ETag': etag || '(not found)',
         'All Headers': Array.from(response.headers.entries()),
-        'URL': `${compositeServiceUrl}/api/events`
+        'URL': `${compositeServiceUrl}/api/events?skip=${offset}&limit=${limit}`
       });
       if (etag) {
         console.log('✅ eTag received:', etag);
@@ -141,6 +144,28 @@ const Events: React.FC = () => {
       // Composite service returns {items: [...], total, skip, limit, has_more}
       // Direct service returns array or {items: [...]}
       const eventsList = Array.isArray(data) ? data : (data.items || []);
+      
+      // Log HATEOAS links from collection response
+      if (!Array.isArray(data) && data.links) {
+        console.log('🔗 HATEOAS Links (Collection):', data.links);
+      }
+      
+      // Log entire first event object with HATEOAS links
+      if (eventsList.length > 0) {
+        console.log('📅 Full Event Object with HATEOAS Links (First Event):', eventsList[0]);
+        if (eventsList[0].links) {
+          console.log('🔗 HATEOAS Links from first event:', eventsList[0].links);
+        }
+      }
+      
+      // Update pagination metadata
+      if (!Array.isArray(data)) {
+        setTotal(data.total || eventsList.length);
+        setHasMore(data.has_more !== undefined ? data.has_more : (eventsList.length >= limit));
+      } else {
+        setTotal(eventsList.length);
+        setHasMore(eventsList.length >= limit);
+      }
       
       // Check conflicts for each event
       const eventsWithConflicts = eventsList.map((event: Event) => {
@@ -159,7 +184,7 @@ const Events: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [idToken, compositeServiceUrl, checkEventConflict]);
+  }, [idToken, compositeServiceUrl, checkEventConflict, limit]);
 
   useEffect(() => {
     if (idToken && userProfile) {
@@ -169,9 +194,9 @@ const Events: React.FC = () => {
 
   useEffect(() => {
     if (idToken && schedules.length >= 0) {
-      fetchEvents();
+      fetchEvents(skip);
     }
-  }, [idToken, schedules, fetchEvents]);
+  }, [idToken, schedules, fetchEvents, skip]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
@@ -231,7 +256,8 @@ const Events: React.FC = () => {
         if (taskData.status === 'completed') {
           setSuccess('Event created successfully!');
           resetForm();
-          fetchEvents();
+          setSkip(0); // Reset to first page
+          fetchEvents(0);
           // Clear task status after 3 seconds
           setTimeout(() => {
             setTaskStatus(null);
@@ -334,7 +360,8 @@ const Events: React.FC = () => {
         // Fallback for non-202 responses (shouldn't happen with async endpoint)
         setSuccess('Event created successfully!');
         resetForm();
-        fetchEvents();
+        setSkip(0); // Reset to first page
+        fetchEvents(0);
         setIsSubmitting(false);
       }
     } catch (error: any) {
@@ -397,7 +424,7 @@ const Events: React.FC = () => {
 
       setSuccess('Event updated successfully!');
       resetForm();
-      fetchEvents();
+      fetchEvents(skip);
     } catch (error: any) {
       console.error('Error updating event:', error);
       setError(error.message || 'Failed to update event');
@@ -657,6 +684,35 @@ const Events: React.FC = () => {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* Pagination Controls */}
+      {!loading && events.length > 0 && (
+        <div className="events-pagination">
+          <button
+            className="events-pagination-button"
+            onClick={() => {
+              const newSkip = Math.max(0, skip - limit);
+              setSkip(newSkip);
+            }}
+            disabled={skip === 0}
+          >
+            Previous
+          </button>
+          <span className="events-pagination-info">
+            Showing {skip + 1}-{Math.min(skip + limit, total)} of {total} events
+          </span>
+          <button
+            className="events-pagination-button"
+            onClick={() => {
+              const newSkip = skip + limit;
+              setSkip(newSkip);
+            }}
+            disabled={!hasMore}
+          >
+            Next
+          </button>
         </div>
       )}
     </div>
