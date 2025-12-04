@@ -3,11 +3,12 @@ import { useAuth } from './useAuth';
 import Events from './Events';
 import Feed from './Feed';
 import Profile from './Profile';
+import Friends from './Friends';
 import Login from './Login';
 import logo from './file.svg';
 import './App.css';
 
-type Page = 'home' | 'feed' | 'events' | 'profile' | 'login';
+type Page = 'home' | 'feed' | 'events' | 'profile' | 'friends' | 'login';
 
 function App() {
   const { currentUser, userProfile, loading, logout } = useAuth();
@@ -154,6 +155,12 @@ function App() {
           >
             Events
           </button>
+          <button 
+            className={`App-nav-button ${currentPage === 'friends' ? 'active' : ''}`}
+            onClick={() => setCurrentPage('friends')}
+          >
+            Friends
+          </button>
         </nav>
       )}
 
@@ -182,6 +189,8 @@ function App() {
             <Feed />
           ) : currentPage === 'events' ? (
             <Events />
+          ) : currentPage === 'friends' ? (
+            <Friends />
           ) : currentPage === 'profile' ? (
             <Profile />
           ) : null}
